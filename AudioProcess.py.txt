@@ -1,0 +1,69 @@
+import os
+import librosa
+import speech_recognition as sr
+import numpy as np
+import pandas as pd
+import re
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Step 1: Preprocess Audio and Convert to Text
+def preprocess_audio(file_path):
+    audio, sr = librosa.load(file_path, sr=None)
+    audio = audio / max(abs(audio))  # Normalize audio
+    return audio, sr
+
+def convert_audio_to_text(file_path):
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(file_path) as source:
+        audio_data = recognizer.record(source)
+        text = recognizer.recognize_google(audio_data)
+    return text
+
+# Step 2: Feature Extraction
+def extract_features(audio, text, sr):
+    sentences = re.split(r'[.!?]', text)
+    pauses_per_sentence = [len(re.findall(r'\s+', sentence)) for sentence in sentences]
+
+    hesitation_markers = len(re.findall(r'\b(uh|um|like|you know)\b', text, re.IGNORECASE))
+    word_substitutions = len(re.findall(r'\b(substituted_word)\b', text))  # Placeholder
+    speech_rate = len(text.split()) / (len(audio) / sr)  # words per second
+
+    pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
+    pitch_variability = np.std(pitches[pitches > 0])  # Only consider positive pitches
+
+    lost_words = len(re.findall(r'\b(lost_word)\b', text))  # Placeholder
+    sentence_completion = len(sentences) - len(re.findall(r'\b\w+\b', text))  # Incomplete sentences
+
+    return {
+        'pauses_per_sentence': np.mean(pauses_per_sentence),
+        'hesitation_markers': hesitation_markers,
+        'word_substitutions': word_substitutions,
+        'speech_rate': speech_rate,
+        'pitch_variability': pitch_variability,
+        'lost_words': lost_words,
+        'sentence_completion': sentence_completion
+    }
+
+# Step 3: Unsupervised ML/NLP Approach
+def cluster_features(features):
+    df = pd.DataFrame(features)
+    scaler = StandardScaler()
+    scaled_features = scaler.fit_transform(df)
+
+    kmeans = KMeans(n_clusters=2)  # Adjust number of clusters as needed
+    df['cluster'] = kmeans.fit_predict(scaled_features)
+
+    return df
+
+# Step 4: Reporting
+def generate_report(features_df):
+    insights = features_df.describe()
+    most_insightful = features_df.corr().abs().nlargest(1, 'cluster')
+
+    report = {
+        'insights': insights,
+        'most_insightful_features': most_insightful,
+        'ml_method':
